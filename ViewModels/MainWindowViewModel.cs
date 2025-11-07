@@ -5,14 +5,19 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using InventorySystem2.Models;
+using System.Linq;
+
+using Microsoft.EntityFrameworkCore;        // til Include/ThenInclude i save-koden
+using InventorySystem2.Models;             // dine domæneklasser til UI
+using InventorySystem2.Data;               // DbReader + DbContext + DbSeeder
+using InventorySystem2.Data.Entities;      // entity-typer til mapping
 
 namespace InventorySystem2.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
-    private readonly Inventory _inventory;   // lager
-    private readonly OrderBook _orderBook;   // ordrebog
+    private readonly Inventory _inventory;   // lager (domæne)
+    private readonly OrderBook _orderBook;   // ordrebog (domæne)
     private readonly Robot _robot = new Robot("localhost", 30002); // robot socket
 
     public ObservableCollection<Order> QueuedOrders  { get; }     // kø
@@ -25,46 +30,27 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set { _totalRevenue = value; OnPropertyChanged(); }
     }
 
+    // statuslinje-tekst
+    private string _statusMessage = "Ready";
+    public string StatusMessage
+    {
+        get => _statusMessage;
+        private set { _statusMessage = value; OnPropertyChanged(); }
+    }
+
     public ICommand ProcessNextCommand { get; }
-    public ICommand PingCommand { get; }   // Ping/vinke
+    public ICommand PingCommand { get; }             // Ping/vinke
+    public ICommand CheckDbCommand { get; }          // “Check connection”
+    public ICommand ResetDbCommand { get; }          // NY: Nulstil database til seed
 
     public MainWindowViewModel()
     {
-        // demo-varer
-        var rice  = new BulkItem("Rice", 1.20m, "kg");
-        var cable = new BulkItem("Cable", 4.00m, "m");
-        var screw = new UnitItem("Screw", 0.50m, 0.02);
-        var pen   = new UnitItem("Pen", 2.00m, 0.01);
+        // === Læs fra database ===
+        var bookEntity = DbReader.ReadOrderBook();
+        var invEntity  = DbReader.ReadInventory();
 
-        // startlager
-        var stock = new Dictionary<Item, double>
-        {
-            [rice] = 12.0, [cable] = 40.0, [screw] = 50.0, [pen] = 3.0
-        };
-
-        _inventory = new Inventory(stock);
-        _orderBook = new OrderBook();
-
-        // tre ordrer i kø
-        var o1 = new Order(DateTime.Now.AddMinutes(-10), new()
-        {
-            new OrderLine(rice, 2.5),
-            new OrderLine(pen, 2)
-        });
-        var o2 = new Order(DateTime.Now.AddMinutes(-7), new()
-        {
-            new OrderLine(screw, 10),
-            new OrderLine(cable, 3)
-        });
-        var o3 = new Order(DateTime.Now.AddMinutes(-2), new()
-        {
-            new OrderLine(pen, 1),
-            new OrderLine(rice, 1.0)
-        });
-
-        _orderBook.QueueOrder(o1);
-        _orderBook.QueueOrder(o2);
-        _orderBook.QueueOrder(o3);
+        _orderBook = MapOrderBook(bookEntity);   // entities -> domæne
+        _inventory = MapInventory(invEntity);
 
         // bind til UI
         QueuedOrders    = new ObservableCollection<Order>(_orderBook.QueuedOrders);
@@ -75,11 +61,47 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ProcessNextCommand = new RelayCommandAsync(_ => ProcessNextAsync(),
                                                    _ => QueuedOrders.Count > 0);
         PingCommand        = new RelayCommandAsync(_ => PingRobotAsync());
+        CheckDbCommand     = new RelayCommandAsync(_ => CheckDbAsync());
+        ResetDbCommand     = new RelayCommandAsync(_ => ResetDbAsync());  // NY
 
         // enable/disable når kø ændres
         QueuedOrders.CollectionChanged += (_, __)
             => ((RelayCommandAsync)ProcessNextCommand).RaiseCanExecuteChanged();
     }
+
+    // ========== Mapping: Entities -> Domæne ==========
+    private static Item MapItem(ItemEntity e) =>
+        e switch
+        {
+            BulkItemEntity b => new BulkItem(b.Id, b.PricePerUnit, b.MeasurementUnit),
+            UnitItemEntity u => new UnitItem(u.Id, u.PricePerUnit, u.Weight),
+            _                => new Item(e.Id, e.PricePerUnit)
+        };
+
+    private static Inventory MapInventory(InventoryEntity inv)
+    {
+        var dict = new Dictionary<Item, double>();
+        foreach (var it in inv.Stock ?? new List<ItemEntity>())
+            dict[MapItem(it)] = (double)it.Quantity;
+        return new Inventory(dict);
+    }
+
+    private static OrderLine MapOrderLine(OrderLineEntity line)
+        => new OrderLine(MapItem(line.Item), line.Quantity);
+
+    private static Order MapOrder(OrderEntity o)
+        => new Order(o.Time, (o.OrderLines ?? new List<OrderLineEntity>()).Select(MapOrderLine).ToList());
+
+    private static OrderBook MapOrderBook(OrderBookEntity e)
+    {
+        var book = new OrderBook();
+        foreach (var qo in e.QueuedOrders ?? new List<OrderEntity>())
+            book.QueuedOrders.Add(MapOrder(qo));
+        foreach (var po in e.ProcessedOrders ?? new List<OrderEntity>())
+            book.ProcessedOrders.Add(MapOrder(po));
+        return book;
+    }
+    // ================================================
 
     // flyt fra slot -> S (simpel generator + lille pause)
     private async Task PickToS(string slot, uint itemId)
@@ -120,7 +142,56 @@ end
         await Task.Delay(300);
     }
 
-    // ordre -> robot (3 hop) -> flyt i UI -> opdater revenue
+    // check DB-connection
+    private async Task CheckDbAsync()
+    {
+        try
+        {
+            using var db = new InventorySystem2.Data.InventoryDbContext();
+            var can = await db.Database.CanConnectAsync();
+            StatusMessage = can ? "DB OK ✅" : "DB not reachable ❌";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"DB error: {ex.Message}";
+        }
+    }
+
+    // NY: reset DB til seed-tilstand og reload GUI
+    private async Task ResetDbAsync()
+    {
+        try
+        {
+            StatusMessage = "Resetting DB…";
+            await Task.Run(() => DbSeeder.ResetToSeed()); // delete + reseed
+
+            // reload entities
+            var bookEntity = DbReader.ReadOrderBook();
+            var invEntity  = DbReader.ReadInventory();
+
+            // map til domæne
+            var freshBook = MapOrderBook(bookEntity);
+            var freshInv  = MapInventory(invEntity);
+
+            // opdater backing felter
+            // (vi holder felterne readonly i signaturen og opdaterer kun GUI-collections)
+            // Tøm og fyld collections så bindings ikke brydes
+            QueuedOrders.Clear();
+            foreach (var o in freshBook.QueuedOrders) QueuedOrders.Add(o);
+
+            ProcessedOrders.Clear();
+            foreach (var o in freshBook.ProcessedOrders) ProcessedOrders.Add(o);
+
+            TotalRevenue = freshBook.TotalRevenue();
+            StatusMessage = "DB reset OK ✅";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Reset error: {ex.Message}";
+        }
+    }
+
+    // ordre -> robot (3 hop) -> flyt i UI -> opdater revenue -> GEM I DB
     private async Task ProcessNextAsync()
     {
         var processed = _orderBook.ProcessNextOrder(_inventory);
@@ -131,13 +202,61 @@ end
         await PickToS("b", 102);
         await PickToS("c", 103);
 
-        // conveyor flytter S automatisk (krav i opgaven)
         Console.WriteLine("Shipment box moved by conveyor belt.");
 
         // GUI-opdatering som før
         if (QueuedOrders.Count > 0) QueuedOrders.RemoveAt(0);
         ProcessedOrders.Add(processed);
         TotalRevenue = _orderBook.TotalRevenue();
+
+        // === Persistér ændringen i databasen ===
+        try
+        {
+            using var db = new InventoryDbContext();
+
+            // Hent OrderBook + alle relaterede data
+            var book = await db.OrderBooks
+                .Include(o => o.QueuedOrders)
+                    .ThenInclude(q => q.OrderLines)
+                        .ThenInclude(l => l.Item)
+                .Include(o => o.ProcessedOrders)
+                    .ThenInclude(p => p.OrderLines)
+                        .ThenInclude(l => l.Item)
+                .FirstOrDefaultAsync();
+
+            if (book is null)
+            {
+                StatusMessage = "DB warning: OrderBook not found.";
+                return;
+            }
+
+            // Find næste ordre i DB-køen (samme logik som i VM: den tidligste)
+            var next = book.QueuedOrders
+                .OrderBy(o => o.Time)
+                .FirstOrDefault();
+
+            if (next is null)
+            {
+                StatusMessage = "DB info: No queued order to move.";
+                return;
+            }
+
+            // Opdater lager-mængder i DB for hvert order line
+            foreach (var line in next.OrderLines)
+                if (line.Item is not null)
+                    line.Item.Quantity -= (decimal)line.Quantity;
+
+            // Flyt ordren i DB: fra Queue -> Processed
+            book.QueuedOrders.Remove(next);
+            book.ProcessedOrders.Add(next);
+
+            await db.SaveChangesAsync();
+            StatusMessage = "DB updated ✅";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"DB save error: {ex.Message}";
+        }
     }
 
     // INotifyPropertyChanged
@@ -146,7 +265,7 @@ end
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-// Async ICommand helper
+// Async ICommand helper (uændret)
 public sealed class RelayCommandAsync : ICommand
 {
     private readonly Func<object?, Task> _executeAsync;
