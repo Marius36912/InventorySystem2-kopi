@@ -101,3 +101,26 @@ Jeg er ansvarlig for den afleverede løsning.
 
 
 // =======================================================
+
+Week 09: Database (Persistent Inventory)
+
+- Programmet bruger SQLite-database (`inventory_main`) til at gemme varer og ordrer.
+- Process Order opdaterer tabellerne `Items` og `Orders` i databasen.
+- Reset DB nulstiller indholdet uden at slette selve filen.
+- Efter genstart bevares ændringerne i databasen.
+- Se video-demoen: [link til video]
+
+## ai brug
+AI-brug:
+Denne aflevering er udviklet med hjælp fra 
+kilde: ChatGPT (OpenAI, 2025).
+ChatGPT har været brugt som feedback og kodeassistent under arbejdet.
+Konkret har jeg brugt AI til at:
+Generere et grundskelet for Avalonia GUI og MVVM-struktur ud fra mine udarbejdede aktivities og noter fra timen.
+Hjælpe med at rette build fejl og forstå bindinger i XAML, samt sparring med noter og pensum for besvarelse af aflevering.
+Den har derudover givet forslag til kommentarer og forenkling af viewmodel koden.
+Brugte også til read me og class diagram skelet, hvor jeg har skrevet om til eget sprog.
+Jeg har selv skrevet og tilpasset al kode, gennemgået logikken,
+og indsat mine egne danske kommentarer for at vise forståelse af pensum.
+Jeg tager fuldt ansvar for den endelige kode, struktur og rapport.
+Jeg er ansvarlig for den afleverede løsning.
