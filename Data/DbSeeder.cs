@@ -28,16 +28,14 @@ namespace InventorySystem2.Data
                 return;
 
             // ----- Items -----
-            var rice  = new BulkItemEntity { Id = "Rice",  PricePerUnit = 1.20m, Quantity = 12m,  MeasurementUnit = "kg", InventoryLocation = 1 };
-            var cable = new BulkItemEntity { Id = "Cable", PricePerUnit = 4.00m, Quantity = 40m, MeasurementUnit = "m",  InventoryLocation = 2 };
-            var screw = new UnitItemEntity { Id = "Screw", PricePerUnit = 0.50m, Quantity = 50m, Weight = 0.02, InventoryLocation = 3 };
-            var pen   = new UnitItemEntity { Id = "Pen",   PricePerUnit = 2.00m, Quantity = 3m,  Weight = 0.01, InventoryLocation = 4 };
+            var Whiteshell = new UnitItemEntity { Id = "White Shell", PricePerUnit = 50.0m, Quantity = 10m,  Weight = 0.10, InventoryLocation = 1 };
+            var Blackshell = new UnitItemEntity { Id = "Black Shell", PricePerUnit = 50.0m, Quantity = 10m, Weight = 0.10,  InventoryLocation = 2 };
 
             // ----- Inventory -----
             var inv = new InventoryEntity
             {
                 Id = "main",
-                Stock = new List<ItemEntity> { rice, cable, screw, pen }
+                Stock = new List<ItemEntity> { Whiteshell, Blackshell}
             };
 
             // ----- Tre ordrer i kø (eksempeldata) -----
@@ -46,8 +44,7 @@ namespace InventorySystem2.Data
                 Time = DateTime.Now.AddMinutes(-10),
                 OrderLines = new List<OrderLineEntity>
                 {
-                    new() { Item = rice,  Quantity = 2.5 },
-                    new() { Item = pen,   Quantity = 2   },
+                    new() { Item = Whiteshell,  Quantity = 2 },
                 }
             };
 
@@ -56,8 +53,7 @@ namespace InventorySystem2.Data
                 Time = DateTime.Now.AddMinutes(-7),
                 OrderLines = new List<OrderLineEntity>
                 {
-                    new() { Item = screw, Quantity = 10  },
-                    new() { Item = cable, Quantity = 3   },
+                    new() { Item = Blackshell, Quantity = 2  },
                 }
             };
 
@@ -66,8 +62,8 @@ namespace InventorySystem2.Data
                 Time = DateTime.Now.AddMinutes(-2),
                 OrderLines = new List<OrderLineEntity>
                 {
-                    new() { Item = pen,   Quantity = 1   },
-                    new() { Item = rice,  Quantity = 1.0 },
+                    new() { Item = Whiteshell,   Quantity = 1   },
+                    new() { Item = Blackshell,  Quantity = 1 },
                 }
             };
 
