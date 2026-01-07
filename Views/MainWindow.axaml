@@ -26,7 +26,9 @@
 
       <!-- Robot: IP + Connect (Ping) -->
       <TextBlock VerticalAlignment="Center" Text="Robot IP:"/>
-      <TextBox Width="180" Watermark="localhost" />
+      <TextBox Width="180"
+               Watermark="localhost"
+               Text="{Binding RobotIp}" />
       <Button Content="Connect" MinWidth="100"
               Command="{Binding PingCommand}" />
 
