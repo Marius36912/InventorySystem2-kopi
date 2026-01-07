@@ -7,10 +7,10 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 
-using Microsoft.EntityFrameworkCore;        // til Include/ThenInclude i save-koden
-using InventorySystem2.Models;             // dine domæneklasser til UI
-using InventorySystem2.Data;               // DbReader + DbContext + DbSeeder
-using InventorySystem2.Data.Entities;      // entity-typer til mapping
+using Microsoft.EntityFrameworkCore;
+using InventorySystem2.Models;
+using InventorySystem2.Data;
+using InventorySystem2.Data.Entities;
 
 namespace InventorySystem2.ViewModels;
 
@@ -18,10 +18,32 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
     private readonly Inventory _inventory;   // lager (domæne)
     private readonly OrderBook _orderBook;   // ordrebog (domæne)
-    private readonly Robot _robot = new Robot("localhost", 30002); // robot socket
 
-    public ObservableCollection<Order> QueuedOrders  { get; }     // kø
-    public ObservableCollection<Order> ProcessedOrders { get; }   // færdige
+    // ========= Robot settings (NY) =========
+    private string _robotIp = "localhost";
+    public string RobotIp
+    {
+        get => _robotIp;
+        set
+        {
+            if (_robotIp == value) return;
+            _robotIp = value;
+            OnPropertyChanged();
+            _robot = null; // force reconnect når IP ændres
+        }
+    }
+
+    private const int RobotPort = 30002;
+    private Robot? _robot;
+
+    private void EnsureRobot()
+    {
+        _robot ??= new Robot(RobotIp, RobotPort);
+    }
+    // =======================================
+
+    public ObservableCollection<Order> QueuedOrders { get; }
+    public ObservableCollection<Order> ProcessedOrders { get; }
 
     private decimal _totalRevenue;
     public decimal TotalRevenue
@@ -30,7 +52,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         private set { _totalRevenue = value; OnPropertyChanged(); }
     }
 
-    // statuslinje-tekst
     private string _statusMessage = "Ready";
     public string StatusMessage
     {
@@ -39,32 +60,29 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     public ICommand ProcessNextCommand { get; }
-    public ICommand PingCommand { get; }             // Ping/vinke
-    public ICommand CheckDbCommand { get; }          // “Check connection”
-    public ICommand ResetDbCommand { get; }          // NY: Nulstil database til seed
+    public ICommand PingCommand { get; }
+    public ICommand CheckDbCommand { get; }
+    public ICommand ResetDbCommand { get; }
 
     public MainWindowViewModel()
     {
         // === Læs fra database ===
         var bookEntity = DbReader.ReadOrderBook();
-        var invEntity  = DbReader.ReadInventory();
+        var invEntity = DbReader.ReadInventory();
 
-        _orderBook = MapOrderBook(bookEntity);   // entities -> domæne
+        _orderBook = MapOrderBook(bookEntity);
         _inventory = MapInventory(invEntity);
 
-        // bind til UI
-        QueuedOrders    = new ObservableCollection<Order>(_orderBook.QueuedOrders);
+        QueuedOrders = new ObservableCollection<Order>(_orderBook.QueuedOrders);
         ProcessedOrders = new ObservableCollection<Order>(_orderBook.ProcessedOrders);
-        TotalRevenue    = _orderBook.TotalRevenue();
+        TotalRevenue = _orderBook.TotalRevenue();
 
-        // knapper (async)
         ProcessNextCommand = new RelayCommandAsync(_ => ProcessNextAsync(),
                                                    _ => QueuedOrders.Count > 0);
-        PingCommand        = new RelayCommandAsync(_ => PingRobotAsync());
-        CheckDbCommand     = new RelayCommandAsync(_ => CheckDbAsync());
-        ResetDbCommand     = new RelayCommandAsync(_ => ResetDbAsync());  // NY
+        PingCommand = new RelayCommandAsync(_ => PingRobotAsync());
+        CheckDbCommand = new RelayCommandAsync(_ => CheckDbAsync());
+        ResetDbCommand = new RelayCommandAsync(_ => ResetDbAsync());
 
-        // enable/disable når kø ændres
         QueuedOrders.CollectionChanged += (_, __)
             => ((RelayCommandAsync)ProcessNextCommand).RaiseCanExecuteChanged();
     }
@@ -75,7 +93,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             BulkItemEntity b => new BulkItem(b.Id, b.PricePerUnit, b.MeasurementUnit),
             UnitItemEntity u => new UnitItem(u.Id, u.PricePerUnit, u.Weight),
-            _                => new Item(e.Id, e.PricePerUnit)
+            _ => new Item(e.Id, e.PricePerUnit)
         };
 
     private static Inventory MapInventory(InventoryEntity inv)
@@ -103,51 +121,31 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
     // ================================================
 
-    // flyt fra slot -> S (simpel generator + lille pause)
-    private async Task PickToS(string slot, uint itemId)
-    {
-        var from = slot.ToLowerInvariant() switch
-        {
-            "a" => RobotPositions.A,
-            "b" => RobotPositions.B,
-            "c" => RobotPositions.C,
-            _   => RobotPositions.A
-        };
-        var to = RobotPositions.S;
-
-        var program = RobotPositions.GenerateMove(from, to);
-        _robot.SendProgram(program, itemId);
-
-        await Task.Delay(300);
-    }
-
-    // "Ping robot" – tydelig vinke-bevægelse 3 gange
+    // "Ping robot" – bruger den nye RobotPositions.Wave()
     public async Task PingRobotAsync()
     {
-        var prog = @"
-def ping():
-  home = [0, -1.57, 0, -1.57, 0, 0]
-  left =  p[0.25, -0.25, 0.20, 0, -3.1415, 0]
-  right = p[0.25,  0.25, 0.20, 0, -3.1415, 0]
-  movej(home, a=1.2, v=0.6)
-  i = 0
-  while (i < 3):
-    movej(get_inverse_kin(left),  a=1.2, v=0.6)
-    movej(get_inverse_kin(right), a=1.2, v=0.6)
-    i = i + 1
-  end
-end
-";
-        _robot.SendProgram(prog, 999);
-        await Task.Delay(300);
+        try
+        {
+            EnsureRobot();
+
+            // hvis du vil bruge dashboard (29999) senere:
+            // _robot!.ReleaseBrakes();
+
+            _robot!.SendProgram(RobotPositions.Wave(), 999);
+            StatusMessage = $"Robot OK ✅ ({RobotIp}:{RobotPort})";
+            await Task.Delay(300);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Robot error: {ex.Message}";
+        }
     }
 
-    // check DB-connection
     private async Task CheckDbAsync()
     {
         try
         {
-            using var db = new InventorySystem2.Data.InventoryDbContext();
+            using var db = new InventoryDbContext();
             var can = await db.Database.CanConnectAsync();
             StatusMessage = can ? "DB OK ✅" : "DB not reachable ❌";
         }
@@ -157,25 +155,18 @@ end
         }
     }
 
-    // NY: reset DB til seed-tilstand og reload GUI
     private async Task ResetDbAsync()
     {
         try
         {
             StatusMessage = "Resetting DB…";
-            await Task.Run(() => DbSeeder.ResetToSeed()); // delete + reseed
+            await Task.Run(() => DbSeeder.ResetToSeed());
 
-            // reload entities
             var bookEntity = DbReader.ReadOrderBook();
-            var invEntity  = DbReader.ReadInventory();
+            var invEntity = DbReader.ReadInventory();
 
-            // map til domæne
             var freshBook = MapOrderBook(bookEntity);
-            var freshInv  = MapInventory(invEntity);
 
-            // opdater backing felter
-            // (vi holder felterne readonly i signaturen og opdaterer kun GUI-collections)
-            // Tøm og fyld collections så bindings ikke brydes
             QueuedOrders.Clear();
             foreach (var o in freshBook.QueuedOrders) QueuedOrders.Add(o);
 
@@ -191,30 +182,24 @@ end
         }
     }
 
-    // ordre -> robot (3 hop) -> flyt i UI -> opdater revenue -> GEM I DB
+    // ===============================
+    // Process next: ROBOT + DB update
+    // ===============================
     private async Task ProcessNextAsync()
     {
+        // 1) Opdater domæne + UI (som før)
         var processed = _orderBook.ProcessNextOrder(_inventory);
         if (processed is null) return;
 
-        // === Robotdel: 3 hop fra a,b,c -> S ===
-        await PickToS("a", 101);
-        await PickToS("b", 102);
-        await PickToS("c", 103);
-
-        Console.WriteLine("Shipment box moved by conveyor belt.");
-
-        // GUI-opdatering som før
         if (QueuedOrders.Count > 0) QueuedOrders.RemoveAt(0);
         ProcessedOrders.Add(processed);
         TotalRevenue = _orderBook.TotalRevenue();
 
-        // === Persistér ændringen i databasen ===
+        // 2) Persistér + kør robot baseret på DB InventoryLocation
         try
         {
             using var db = new InventoryDbContext();
 
-            // Hent OrderBook + alle relaterede data
             var book = await db.OrderBooks
                 .Include(o => o.QueuedOrders)
                     .ThenInclude(q => q.OrderLines)
@@ -230,7 +215,6 @@ end
                 return;
             }
 
-            // Find næste ordre i DB-køen (samme logik som i VM: den tidligste)
             var next = book.QueuedOrders
                 .OrderBy(o => o.Time)
                 .FirstOrDefault();
@@ -241,21 +225,37 @@ end
                 return;
             }
 
-            // Opdater lager-mængder i DB for hvert order line
+            // --- ROBOT: kør URScript ud fra locations ---
+            EnsureRobot();
+
+            foreach (var line in next.OrderLines)
+            {
+                if (line.Item is null) continue;
+
+                // Pick fra item.InventoryLocation -> Assembly
+                var program = RobotPositions.PickToAssembly(line.Item.InventoryLocation, fromStackIndex: 0);
+                _robot!.SendProgram(program, 1000); // itemId bruges kun til navngivning/log
+
+                await Task.Delay(150); // lille buffer mellem scripts
+            }
+
+            // Flyt færdig klods/produkt fra Assembly -> Output (valgfrit)
+            _robot!.SendProgram(RobotPositions.AssemblyToOutput(), 2000);
+
+            // --- DB: opdater quantities + flyt order ---
             foreach (var line in next.OrderLines)
                 if (line.Item is not null)
                     line.Item.Quantity -= (decimal)line.Quantity;
 
-            // Flyt ordren i DB: fra Queue -> Processed
             book.QueuedOrders.Remove(next);
             book.ProcessedOrders.Add(next);
 
             await db.SaveChangesAsync();
-            StatusMessage = "DB updated ✅";
+            StatusMessage = "DB updated ✅ + Robot ran ✅";
         }
         catch (Exception ex)
         {
-            StatusMessage = $"DB save error: {ex.Message}";
+            StatusMessage = $"DB save/robot error: {ex.Message}";
         }
     }
 
@@ -265,7 +265,7 @@ end
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
 
-// Async ICommand helper (uændret)
+// Async ICommand helper
 public sealed class RelayCommandAsync : ICommand
 {
     private readonly Func<object?, Task> _executeAsync;
