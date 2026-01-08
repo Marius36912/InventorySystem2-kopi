@@ -30,6 +30,8 @@ namespace InventorySystem2.Data
             // ----- Items -----
             var Whiteshell = new UnitItemEntity { Id = "White Shell", PricePerUnit = 50.0m, Quantity = 10m,  Weight = 0.10, InventoryLocation = 1 };
             var Blackshell = new UnitItemEntity { Id = "Black Shell", PricePerUnit = 50.0m, Quantity = 10m, Weight = 0.10,  InventoryLocation = 2 };
+            var MixedSet = new UnitItemEntity { Id = "Mixed Set (1 white + 1 black)", PricePerUnit = 100.0m, Quantity = 10m, Weight = 0.20, InventoryLocation = 0,};
+
 
             // ----- Inventory -----
             var inv = new InventoryEntity
@@ -62,8 +64,8 @@ namespace InventorySystem2.Data
                 Time = DateTime.Now.AddMinutes(-2),
                 OrderLines = new List<OrderLineEntity>
                 {
-                    new() { Item = Whiteshell,   Quantity = 1   },
-                    new() { Item = Blackshell,  Quantity = 1 },
+                    new() { Item = MixedSet, Quantity = 1 }
+
                 }
             };
 
