@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using InventorySystem2.Data.Entities; // vores EF-entiteter
 
@@ -19,7 +22,19 @@ namespace InventorySystem2.Data
 
         // ===== DB config =====
         protected override void OnConfiguring(DbContextOptionsBuilder options)
-            => options.UseSqlite("Data Source=../../../inventory.sqlite");
+        {
+            // Stabil sti: DB ligger ved siden af appens output (undgår ../../../-problemer)
+            var dbPath = Path.Combine(AppContext.BaseDirectory, "inventory.sqlite");
+
+            var csb = new SqliteConnectionStringBuilder
+            {
+                DataSource = dbPath,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Cache = SqliteCacheMode.Shared
+            };
+
+            options.UseSqlite(csb.ToString());
+        }
 
         // ===== Model config (relationer + TPH-arv) =====
         protected override void OnModelCreating(ModelBuilder modelBuilder)
