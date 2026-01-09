@@ -146,7 +146,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             using var db = new InventoryDbContext();
             var can = await db.Database.CanConnectAsync();
-            StatusMessage = can ? "DB OK ✅" : "DB not reachable ❌";
+            var path = db.Database.GetDbConnection().DataSource;
+
+            StatusMessage = can
+                ? $"DB OK ✅  Path: {path}"
+                : $"DB not reachable ❌  Path: {path}";
         }
         catch (Exception ex)
         {
@@ -249,7 +253,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             book.QueuedOrders.Remove(next);
             book.ProcessedOrders.Add(next);
 
+            // VIGTIGT: sæt shadow-FK'er eksplicit, ellers ses det ikke i Orders-tabellen
+            db.Entry(next).Property<int?>("QueuedOrderBookId").CurrentValue = null;
+            db.Entry(next).Property<int?>("ProcessedOrderBookId").CurrentValue = book.Id;
+
             await db.SaveChangesAsync();
+
+            // (valgfrit men hjælper Rider): flush WAL til hovedfilen
+            await db.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(FULL);");
+
             StatusMessage = "DB updated ✅ + Robot ran ✅"; 
         // --- UI/domæne: opdater først når DB+robot lykkedes ---
             var processed = _orderBook.ProcessNextOrder(_inventory);
