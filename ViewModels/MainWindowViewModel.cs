@@ -130,8 +130,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             // hvis du vil bruge dashboard (29999) senere:
             // _robot!.ReleaseBrakes();
-
-            _robot!.SendProgram(RobotPositions.Wave(), 999);
+            
             StatusMessage = $"Robot OK ✅ ({RobotIp}:{RobotPort})";
             await Task.Delay(300);
         }
@@ -187,13 +186,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     // ===============================
     private async Task ProcessNextAsync()
     {
-        // 1) Opdater domæne + UI (som før)
-        var processed = _orderBook.ProcessNextOrder(_inventory);
-        if (processed is null) return;
-
-        if (QueuedOrders.Count > 0) QueuedOrders.RemoveAt(0);
-        ProcessedOrders.Add(processed);
-        TotalRevenue = _orderBook.TotalRevenue();
+    
 
         // 2) Persistér + kør robot baseret på DB InventoryLocation
         try
@@ -202,11 +195,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             var book = await db.OrderBooks
                 .Include(o => o.QueuedOrders)
-                    .ThenInclude(q => q.OrderLines)
-                        .ThenInclude(l => l.Item)
+                .ThenInclude(q => q.OrderLines)
+                .ThenInclude(l => l.Item)
                 .Include(o => o.ProcessedOrders)
-                    .ThenInclude(p => p.OrderLines)
-                        .ThenInclude(l => l.Item)
+                .ThenInclude(p => p.OrderLines)
+                .ThenInclude(l => l.Item)
                 .FirstOrDefaultAsync();
 
             if (book is null)
@@ -214,7 +207,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 StatusMessage = "DB warning: OrderBook not found.";
                 return;
             }
-
+            
             var next = book.QueuedOrders
                 .OrderBy(o => o.Time)
                 .FirstOrDefault();
@@ -227,20 +220,26 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             // --- ROBOT: kør URScript ud fra locations ---
             EnsureRobot();
+            bool sim = RobotIp.Trim().Equals("localhost", StringComparison.OrdinalIgnoreCase);
 
             foreach (var line in next.OrderLines)
             {
                 if (line.Item is null) continue;
 
-                // Pick fra item.InventoryLocation -> Assembly
-                var program = RobotPositions.PickToAssembly(line.Item.InventoryLocation, fromStackIndex: 0);
-                _robot!.SendProgram(program, 1000); // itemId bruges kun til navngivning/log
+                // Kør én sekvens pr. item-type (evt. gentag efter quantity)
+                int repeat = (int)Math.Max(1, Math.Round(line.Quantity));
 
-                await Task.Delay(150); // lille buffer mellem scripts
+                for (int i = 0; i < repeat; i++)
+                {
+                    string program =
+                        line.Item.Id.Equals("Black Shell", StringComparison.OrdinalIgnoreCase)
+                            ? RobotPositions.ItemSorter_BlackShell(sim)   // bruger B
+                            : RobotPositions.ItemSorter_WhiteShell(sim);  // bruger A
+
+                    _robot!.SendProgram(program, 1000);
+                    await Task.Delay(150);
+                }
             }
-
-            // Flyt færdig klods/produkt fra Assembly -> Output (valgfrit)
-            _robot!.SendProgram(RobotPositions.AssemblyToOutput(), 2000);
 
             // --- DB: opdater quantities + flyt order ---
             foreach (var line in next.OrderLines)
@@ -251,7 +250,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             book.ProcessedOrders.Add(next);
 
             await db.SaveChangesAsync();
-            StatusMessage = "DB updated ✅ + Robot ran ✅";
+            StatusMessage = "DB updated ✅ + Robot ran ✅"; 
+        // --- UI/domæne: opdater først når DB+robot lykkedes ---
+            var processed = _orderBook.ProcessNextOrder(_inventory);
+            if (processed is null) return;
+
+            if (QueuedOrders.Count > 0)
+                QueuedOrders.RemoveAt(0);
+
+            ProcessedOrders.Add(processed);
+            TotalRevenue = _orderBook.TotalRevenue();
+
         }
         catch (Exception ex)
         {
