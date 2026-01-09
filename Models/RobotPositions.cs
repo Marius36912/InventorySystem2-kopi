@@ -104,28 +104,32 @@ public static class RobotPositions
     // Skal køre:
     // Start → A10/B10 → A0/B0 → A10/B10 → C10 → C0 → C10 → D10 → D0 → D10 → C10 → C2 → Start
     // -------------------------------------------------------
-    public static string ItemSorter_WhiteShell(bool sim) => ItemSorterSequence(sim, useB: false);
-    public static string ItemSorter_BlackShell(bool sim) => ItemSorterSequence(sim, useB: true);
+    public static string ItemSorter_WhiteShell(bool sim) => ItemSorterSequenceLoop(sim, useB: false, repeats: 1);
+    public static string ItemSorter_BlackShell(bool sim) => ItemSorterSequenceLoop(sim, useB: true, repeats: 1);
 
-    private static string ItemSorterSequence(bool sim, bool useB)
-    {
-        var pPick10 = useB ? P_B_10 : P_A_10;
-        var pPick0  = useB ? P_B_0  : P_A_0;
-        var label   = useB ? "BLACK SHELL (B)" : "WHITE SHELL (A)";
+    public static string ItemSorter_WhiteShell(bool sim, int repeats) => ItemSorterSequenceLoop(sim, useB: false, repeats: repeats);
+    public static string ItemSorter_BlackShell(bool sim, int repeats) => ItemSorterSequenceLoop(sim, useB: true, repeats: repeats);
+    public static string ItemSorter_Mix(bool sim, int repeats) => ItemSorterMixLoop(sim, repeats);
 
-        return $@"
-  textmsg(""ItemSorter: {label}"")
+    private static string ItemSorterSequenceLoop(bool sim, bool useB, int repeats)
+{
+    if (repeats < 1) repeats = 1;
+
+    var pPick10 = useB ? P_B_10 : P_A_10;
+    var pPick0  = useB ? P_B_0  : P_A_0;
+    var label   = useB ? "BLACK SHELL (B)" : "WHITE SHELL (A)";
+
+    return $@"
+  textmsg(""ItemSorter LOOP: {label} x {repeats}"")
 
 {GripperFunctions(sim)}
 
   # Gripper parametre
-  open_mm       = 60      # normal åbning (C, D, C2)
-  open_pick_mm  = 85      # KUN ved A/B
-  open_E_mm     = 70      # ved E0: gå fra 85 -> 70
+  open_mm       = 60
+  open_pick_mm  = 85
   close_mm      = 31
   f_open        = 30
   f_close       = 30
-
 
   # --- Poses ---
   p_start  = {P_START.ToUrScript()}
@@ -143,78 +147,161 @@ public static class RobotPositions
   p_E_10 = {P_E_10.ToUrScript()}
   p_E_0  = {P_E_0.ToUrScript()}
 
-  # ==================================================
-  # SLAVISK MOVE-SEKVENS:
-  # Start
-  # A10/B10 -> A0/B0 -> A10/B10
-  # C10 -> C0 -> C10
-  # D10 -> D0 -> D10
-  # C10 -> C2 -> Start
-  # ==================================================
-
-  # Start (ingen åbning her – vi åbner først ved A0/B0)
-  rg_grip(close_mm, f_close)      # Sikrer lukket gripper ved start
+  # Start-position og sikker gripper
+  rg_grip(close_mm, f_close)
   movel(p_start, a=0.3, v=0.15)
 
-  # A10/B10
-  movel(p_pick_10, a=0.4, v=0.2)
-  # A0/B0
-  movel(p_pick_0,  a=0.2, v=0.1)
+  i = 0
+  while (i < {repeats}):
 
-  rg_grip(85, f_open)             # ÅBN 85 mm
-  # (ingen luk her – gripper forbliver åben)
+    textmsg(""Run #"" + to_str(i+1) + "" / {repeats}"")
 
+    # A10/B10
+    movel(p_pick_10, a=0.4, v=0.2)
+    # A0/B0
+    movel(p_pick_0,  a=0.2, v=0.1)
 
-  # A10/B10
-  movel(p_pick_10, a=0.2, v=0.1)
+    rg_grip(open_pick_mm, f_open)  # ÅBN 85 mm
 
-  # C10
-  movel(p_C_10, a=0.4, v=0.2)
-  # C0
-  movel(p_C_0,  a=0.2, v=0.1)
-  rg_grip(open_mm, f_open)        # SLIP ved C0
+    # A10/B10
+    movel(p_pick_10, a=0.2, v=0.1)
 
-  # C10
-  movel(p_C_10, a=0.2, v=0.1)
+    # C10 -> C0 -> C10
+    movel(p_C_10, a=0.4, v=0.2)
+    movel(p_C_0,  a=0.2, v=0.1)
+    rg_grip(open_mm, f_open)       # SLIP ved C0
+    movel(p_C_10, a=0.2, v=0.1)
 
-  # D10
-  movel(p_D_10, a=0.4, v=0.2)
-  # D0
-  movel(p_D_0,  a=0.2, v=0.1)
-  rg_grip(close_mm, f_close)      # GRIP ved D0
-  # D10
-  movel(p_D_10, a=0.2, v=0.1)
+    # D10 -> D0 -> D10
+    movel(p_D_10, a=0.4, v=0.2)
+    movel(p_D_0,  a=0.2, v=0.1)
+    rg_grip(close_mm, f_close)     # GRIP ved D0
+    movel(p_D_10, a=0.2, v=0.1)
 
-  # C10
-  movel(p_C_10, a=0.4, v=0.2)
-   # C2 (D2 i jeres beskrivelse)
-  movel(p_C_2,  a=0.2, v=0.1)
+    # C10 -> C2
+    movel(p_C_10, a=0.4, v=0.2)
+    movel(p_C_2,  a=0.2, v=0.1)
+    rg_grip(open_pick_mm, f_open)  # ÅBN 85 mm ved C2
 
-  rg_grip(open_pick_mm, f_open)   # ÅBN 85 mm ved C2 og HOLD åben
+    # C10 -> E10 -> E0 (ingen D10 her)
+    movel(p_C_10, a=0.4, v=0.2)
+    movel(p_E_10, a=0.4, v=0.2)
+    movel(p_E_0,  a=0.2, v=0.1)
 
-  # Flyt til E0 via E10 (IKKE via D10)
-  movel(p_C_10, a=0.4, v=0.2)     # op fra C2
-  movel(p_E_10, a=0.4, v=0.2)     # direkte til E10
-  movel(p_E_0,  a=0.2, v=0.1)     # E0
+    rg_grip(open_mm, f_open)       # SLIP ved E0 (60 mm)
 
-  rg_grip(open_mm, f_open)        # SLIP ved E0 (60 mm)
+    # E10 -> Start
+    movel(p_E_10, a=0.4, v=0.2)
+    movel(p_start, a=0.4, v=0.2)
 
-  # E10 og tilbage til Start
-  movel(p_E_10, a=0.4, v=0.2)
-  movel(p_start, a=0.4, v=0.2)
+    i = i + 1
+  end
 
-  textmsg(""DONE: {label}"")
+  textmsg(""DONE LOOP: {label}"")
 ";
-    }
-    
-    // -------------------------------------------------------
-    // Assembly -> Output (kort)
-    // NB: Hvis du IKKE vil have ekstra bevægelse efter C2,
-    // så skal du fjerne kaldet i MainWindowViewModel (se note).
-    // -------------------------------------------------------
-    public static string AssemblyToOutput(bool sim)
-    {
-        return $@"
+}
+private static string ItemSorterMixLoop(bool sim, int repeats)
+{
+    if (repeats < 1) repeats = 1;
+
+    // Mix = (A + B) pr. repeat
+    // Sikker version: returnerer til start mellem runs.
+    return $@"
+  textmsg(""ItemSorter LOOP: MIX (A+B) x {repeats}"")
+
+{GripperFunctions(sim)}
+
+  # Gripper parametre
+  open_mm       = 60
+  open_pick_mm  = 85
+  close_mm      = 31
+  f_open        = 30
+  f_close       = 30
+
+  # --- Poses ---
+  p_start  = {P_START.ToUrScript()}
+
+  p_A_10 = {P_A_10.ToUrScript()}
+  p_A_0  = {P_A_0.ToUrScript()}
+
+  p_B_10 = {P_B_10.ToUrScript()}
+  p_B_0  = {P_B_0.ToUrScript()}
+
+  p_C_10 = {P_C_10.ToUrScript()}
+  p_C_0  = {P_C_0.ToUrScript()}
+  p_C_2  = {P_C_2.ToUrScript()}
+
+  p_D_10 = {P_D_10.ToUrScript()}
+  p_D_0  = {P_D_0.ToUrScript()}
+
+  p_E_10 = {P_E_10.ToUrScript()}
+  p_E_0  = {P_E_0.ToUrScript()}
+
+  # Start-position og sikker gripper
+  rg_grip(close_mm, f_close)
+  movel(p_start, a=0.3, v=0.15)
+
+  # Fælles run-sekvens som URScript-funktion
+  def do_run(p_pick_10, p_pick_0):
+
+    movel(p_pick_10, a=0.4, v=0.2)
+    movel(p_pick_0,  a=0.2, v=0.1)
+
+    rg_grip(open_pick_mm, f_open)  # ÅBN 85 mm
+
+    movel(p_pick_10, a=0.2, v=0.1)
+
+    # C10 -> C0 -> C10
+    movel(p_C_10, a=0.4, v=0.2)
+    movel(p_C_0,  a=0.2, v=0.1)
+    rg_grip(open_mm, f_open)       # SLIP ved C0
+    movel(p_C_10, a=0.2, v=0.1)
+
+    # D10 -> D0 -> D10
+    movel(p_D_10, a=0.4, v=0.2)
+    movel(p_D_0,  a=0.2, v=0.1)
+    rg_grip(close_mm, f_close)     # GRIP ved D0
+    movel(p_D_10, a=0.2, v=0.1)
+
+    # C10 -> C2
+    movel(p_C_10, a=0.4, v=0.2)
+    movel(p_C_2,  a=0.2, v=0.1)
+    rg_grip(open_pick_mm, f_open)  # ÅBN 85 mm ved C2
+
+    # C10 -> E10 -> E0 (ingen D10 her)
+    movel(p_C_10, a=0.4, v=0.2)
+    movel(p_E_10, a=0.4, v=0.2)
+    movel(p_E_0,  a=0.2, v=0.1)
+
+    rg_grip(open_mm, f_open)       # SLIP ved E0 (60 mm)
+
+    # E10 -> Start
+    movel(p_E_10, a=0.4, v=0.2)
+    movel(p_start, a=0.4, v=0.2)
+
+  end
+
+  i = 0
+  while (i < {repeats}):
+
+    textmsg(""MIX repeat "" + to_str(i+1) + "" / {repeats}"")
+
+    # A (White)
+    do_run(p_A_10, p_A_0)
+
+    # B (Black)
+    do_run(p_B_10, p_B_0)
+
+    i = i + 1
+  end
+
+  textmsg(""DONE LOOP: MIX"")
+";
+}
+
+public static string AssemblyToOutput(bool sim)
+{
+    return $@"
   textmsg(""Assembly -> Output"")
 
 {GripperFunctions(sim)}
@@ -230,11 +317,15 @@ public static class RobotPositions
   p_out_10 = {P_D_10.ToUrScript()}
   p_out_0  = {P_D_0.ToUrScript()}
 
+  rg_grip(open_mm, f_open)
+
+  # Pick at Assembly (C)
   movel(p_asm_10, a=0.4, v=0.2)
   movel(p_asm_0,  a=0.2, v=0.1)
   rg_grip(close_mm, f_close)
   movel(p_asm_10, a=0.2, v=0.1)
 
+  # Place at Output (D)
   movel(p_out_10, a=0.4, v=0.2)
   movel(p_out_0,  a=0.2, v=0.1)
   rg_grip(open_mm, f_open)
@@ -242,14 +333,14 @@ public static class RobotPositions
 
   textmsg(""DONE: Assembly -> Output"")
 ";
-    }
+}
 
-    // -------------------------------------------------------
-    // Small record for readability
-    // -------------------------------------------------------
-    private readonly record struct Pose(double X, double Y, double Z, double RX, double RY, double RZ)
-    {
-        public string ToUrScript()
-            => $"p[{F(X)}, {F(Y)}, {F(Z)}, {F(RX)}, {F(RY)}, {F(RZ)}]";
-    }
+// -------------------------------------------------------
+// Small record for readability
+// -------------------------------------------------------
+private readonly record struct Pose(double X, double Y, double Z, double RX, double RY, double RZ)
+{
+    public string ToUrScript()
+        => $"p[{F(X)}, {F(Y)}, {F(Z)}, {F(RX)}, {F(RY)}, {F(RZ)}]";
+}
 }
