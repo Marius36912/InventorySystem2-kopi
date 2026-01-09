@@ -19,7 +19,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly Inventory _inventory;   // lager (domæne)
     private readonly OrderBook _orderBook;   // ordrebog (domæne)
 
-    // ========= Robot settings (NY) =========
+    // ========= Robot settings =========
     private string _robotIp = "localhost";
     public string RobotIp
     {
@@ -40,7 +40,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _robot ??= new Robot(RobotIp, RobotPort);
     }
-    // =======================================
+    // ================================
+
+    // ========= Optional DB safety toggles (fra din "større" version) =========
+    // Shadow-FK + WAL checkpoint hjælper typisk når EF ikke flytter relationen korrekt i Orders-tabellen.
+    private const bool UseShadowFkFix = true;
+    private const bool UseWalCheckpoint = true;
+    // =======================================================================
 
     public ObservableCollection<Order> QueuedOrders { get; }
     public ObservableCollection<Order> ProcessedOrders { get; }
@@ -121,7 +127,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
     // ================================================
 
-    // "Ping robot" – bruger den nye RobotPositions.Wave()
+    // "Ping robot"
     public async Task PingRobotAsync()
     {
         try
@@ -130,7 +136,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             // hvis du vil bruge dashboard (29999) senere:
             // _robot!.ReleaseBrakes();
-            
+
             StatusMessage = $"Robot OK ✅ ({RobotIp}:{RobotPort})";
             await Task.Delay(300);
         }
@@ -166,8 +172,6 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             await Task.Run(() => DbSeeder.ResetToSeed());
 
             var bookEntity = DbReader.ReadOrderBook();
-            var invEntity = DbReader.ReadInventory();
-
             var freshBook = MapOrderBook(bookEntity);
 
             QueuedOrders.Clear();
@@ -190,20 +194,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     // ===============================
     private async Task ProcessNextAsync()
     {
-    
-
-        // 2) Persistér + kør robot baseret på DB InventoryLocation
         try
         {
             using var db = new InventoryDbContext();
 
             var book = await db.OrderBooks
                 .Include(o => o.QueuedOrders)
-                .ThenInclude(q => q.OrderLines)
-                .ThenInclude(l => l.Item)
+                    .ThenInclude(q => q.OrderLines)
+                        .ThenInclude(l => l.Item)
                 .Include(o => o.ProcessedOrders)
-                .ThenInclude(p => p.OrderLines)
-                .ThenInclude(l => l.Item)
+                    .ThenInclude(p => p.OrderLines)
+                        .ThenInclude(l => l.Item)
                 .FirstOrDefaultAsync();
 
             if (book is null)
@@ -211,7 +212,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 StatusMessage = "DB warning: OrderBook not found.";
                 return;
             }
-            
+
             var next = book.QueuedOrders
                 .OrderBy(o => o.Time)
                 .FirstOrDefault();
@@ -222,7 +223,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 return;
             }
 
-            // --- ROBOT: kør URScript ud fra locations ---
+            // --- ROBOT: kør URScript ---
             EnsureRobot();
             bool sim = RobotIp.Trim().Equals("localhost", StringComparison.OrdinalIgnoreCase);
 
@@ -230,19 +231,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 if (line.Item is null) continue;
 
-                // Kør én sekvens pr. item-type (evt. gentag efter quantity)
+                // Quantity -> repeats (loop håndteres inde i URScript)
                 int repeat = (int)Math.Max(1, Math.Round(line.Quantity));
 
-                for (int i = 0; i < repeat; i++)
-                {
-                    string program =
-                        line.Item.Id.Equals("Black Shell", StringComparison.OrdinalIgnoreCase)
-                            ? RobotPositions.ItemSorter_BlackShell(sim)   // bruger B
-                            : RobotPositions.ItemSorter_WhiteShell(sim);  // bruger A
+                string program =
+                    line.Item.Id.Equals("Mix", StringComparison.OrdinalIgnoreCase)
+                        ? RobotPositions.ItemSorter_Mix(sim, repeat)
+                        : line.Item.Id.Equals("Black Shell", StringComparison.OrdinalIgnoreCase)
+                            ? RobotPositions.ItemSorter_BlackShell(sim, repeat)
+                            : RobotPositions.ItemSorter_WhiteShell(sim, repeat);
 
-                    _robot!.SendProgram(program, 1000);
-                    await Task.Delay(150);
-                }
+                _robot!.SendProgram(program, 1000);
+                await Task.Delay(150);
             }
 
             // --- DB: opdater quantities + flyt order ---
@@ -253,17 +253,17 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             book.QueuedOrders.Remove(next);
             book.ProcessedOrders.Add(next);
 
-            // VIGTIGT: sæt shadow-FK'er eksplicit, ellers ses det ikke i Orders-tabellen
-            db.Entry(next).Property<int?>("QueuedOrderBookId").CurrentValue = null;
-            db.Entry(next).Property<int?>("ProcessedOrderBookId").CurrentValue = book.Id;
+            if (UseShadowFkFix)
+                TrySetShadowOrderBookFks(db, next, book.Id);
 
             await db.SaveChangesAsync();
 
-            // (valgfrit men hjælper Rider): flush WAL til hovedfilen
-            await db.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(FULL);");
+            if (UseWalCheckpoint)
+                await db.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(FULL);");
 
-            StatusMessage = "DB updated ✅ + Robot ran ✅"; 
-        // --- UI/domæne: opdater først når DB+robot lykkedes ---
+            StatusMessage = "DB updated ✅ + Robot ran ✅";
+
+            // --- UI/domæne: opdater først når DB+robot lykkedes ---
             var processed = _orderBook.ProcessNextOrder(_inventory);
             if (processed is null) return;
 
@@ -272,11 +272,37 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
             ProcessedOrders.Add(processed);
             TotalRevenue = _orderBook.TotalRevenue();
-
         }
         catch (Exception ex)
         {
             StatusMessage = $"DB save/robot error: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Sikker version af din shadow-FK workaround:
+    /// Kører kun hvis EF faktisk har de shadow properties på OrderEntity.
+    /// </summary>
+    private static void TrySetShadowOrderBookFks(DbContext db, OrderEntity order, int processedBookId)
+    {
+        try
+        {
+            var entry = db.Entry(order);
+
+            // Kun sæt hvis props findes (ellers kaster EF)
+            var hasQueued = entry.Metadata.FindProperty("QueuedOrderBookId") is not null;
+            var hasProcessed = entry.Metadata.FindProperty("ProcessedOrderBookId") is not null;
+
+            if (hasQueued)
+                entry.Property<int?>("QueuedOrderBookId").CurrentValue = null;
+
+            if (hasProcessed)
+                entry.Property<int?>("ProcessedOrderBookId").CurrentValue = processedBookId;
+        }
+        catch
+        {
+            // Ignorer: hvis modellen ikke bruger shadow props i denne version af DB/EF,
+            // så er workaround ikke nødvendig.
         }
     }
 
