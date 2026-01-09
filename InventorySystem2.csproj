@@ -11,6 +11,9 @@
     <!-- fjerner alle xaml filer som evt. er blevet taget forkert med -->
     <ItemGroup>
         <AvaloniaXaml Remove="**\*.axaml" />
+        <Content Include="Views\LoginWindow.axaml" />
+        <Content Include="Views\LoginWindow.axaml" />
+        <Content Include="Views\LoginWindow.axaml" />
         <Page Remove="**\*.axaml" />
         <AvaloniaResource Remove="**\*.axaml" />
         <None Remove="**\*.axaml" />
@@ -37,5 +40,8 @@
         </PackageReference>
         <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.10" />
+    </ItemGroup>
+    <ItemGroup>
+        <AvaloniaResource Include="Views/LoginWindow.axaml" />
     </ItemGroup>
 </Project>

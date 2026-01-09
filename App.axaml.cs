@@ -22,7 +22,7 @@ namespace InventorySystem2
                     Data.DbSeeder.EnsureSeedData();
                     break;
                 }
-                catch (SqliteException ex) when (ex.SqliteErrorCode == 10) // disk I/O error
+                catch (SqliteException ex) when (ex.SqliteErrorCode is 10 or 5 or 14)
                 {
                     attempts++;
 
@@ -41,10 +41,8 @@ namespace InventorySystem2
             // --- Normal Avalonia-boot ---
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
-                desktop.MainWindow = new Views.MainWindow
-                {
-                    DataContext = new ViewModels.MainWindowViewModel()
-                };
+                desktop.MainWindow = new Views.LoginWindow();
+
             }
 
             // --- Ryd SQLite-pools ved proces-exit (sikrer fil-locks slippes) ---
