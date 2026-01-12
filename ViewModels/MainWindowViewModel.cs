@@ -125,7 +125,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             book.ProcessedOrders.Add(MapOrder(po));
         return book;
     }
-    // ================================================
+    private void ReloadUiFromDb()
+    {
+        var bookEntity = DbReader.ReadOrderBook();
+        var freshBook = MapOrderBook(bookEntity);
+
+        // altid stabil sortering
+        var queuedSorted = freshBook.QueuedOrders.OrderBy(o => o.Time).ToList();
+        var processedSorted = freshBook.ProcessedOrders.OrderBy(o => o.Time).ToList();
+
+        QueuedOrders.Clear();
+        foreach (var o in queuedSorted) QueuedOrders.Add(o);
+
+        ProcessedOrders.Clear();
+        foreach (var o in processedSorted) ProcessedOrders.Add(o);
+
+        TotalRevenue = freshBook.TotalRevenue();
+    }
 
     // "Ping robot"
     public async Task PingRobotAsync()
@@ -171,16 +187,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             StatusMessage = "Resetting DB…";
             await Task.Run(() => DbSeeder.ResetToSeed());
 
-            var bookEntity = DbReader.ReadOrderBook();
-            var freshBook = MapOrderBook(bookEntity);
-
-            QueuedOrders.Clear();
-            foreach (var o in freshBook.QueuedOrders) QueuedOrders.Add(o);
-
-            ProcessedOrders.Clear();
-            foreach (var o in freshBook.ProcessedOrders) ProcessedOrders.Add(o);
-
-            TotalRevenue = freshBook.TotalRevenue();
+            // Reload UI fra DB (single source of truth)
+            ReloadUiFromDb();
             StatusMessage = "DB reset OK ✅";
         }
         catch (Exception ex)
@@ -188,10 +196,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             StatusMessage = $"Reset error: {ex.Message}";
         }
     }
-
-    // ===============================
+    
     // Process next: ROBOT + DB update
-    // ===============================
     private async Task ProcessNextAsync()
     {
         try
@@ -262,27 +268,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 await db.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(FULL);");
 
             StatusMessage = "DB updated ✅ + Robot ran ✅";
+            
+            // Reload UI fra DB så UI matcher præcis det DB gjorde
+            ReloadUiFromDb();
 
-            // --- UI/domæne: opdater først når DB+robot lykkedes ---
-            var processed = _orderBook.ProcessNextOrder(_inventory);
-            if (processed is null) return;
-
-            if (QueuedOrders.Count > 0)
-                QueuedOrders.RemoveAt(0);
-
-            ProcessedOrders.Add(processed);
-            TotalRevenue = _orderBook.TotalRevenue();
         }
         catch (Exception ex)
         {
             StatusMessage = $"DB save/robot error: {ex.Message}";
         }
     }
-
-    /// <summary>
+    
     /// Sikker version af din shadow-FK workaround:
     /// Kører kun hvis EF faktisk har de shadow properties på OrderEntity.
-    /// </summary>
     private static void TrySetShadowOrderBookFks(DbContext db, OrderEntity order, int processedBookId)
     {
         try
