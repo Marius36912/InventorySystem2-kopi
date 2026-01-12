@@ -109,7 +109,6 @@ public static class RobotPositions
 
     public static string ItemSorter_WhiteShell(bool sim, int repeats) => ItemSorterSequenceLoop(sim, useB: false, repeats: repeats);
     public static string ItemSorter_BlackShell(bool sim, int repeats) => ItemSorterSequenceLoop(sim, useB: true, repeats: repeats);
-    public static string ItemSorter_Mix(bool sim, int repeats) => ItemSorterMixLoop(sim, repeats);
 
     private static string ItemSorterSequenceLoop(bool sim, bool useB, int repeats)
 {
