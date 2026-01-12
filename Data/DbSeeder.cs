@@ -30,8 +30,6 @@ namespace InventorySystem2.Data
             // ----- Items -----
             var Whiteshell = new UnitItemEntity { Id = "White Shell", PricePerUnit = 50.0m, Quantity = 10m,  Weight = 0.10, InventoryLocation = 1 };
             var Blackshell = new UnitItemEntity { Id = "Black Shell", PricePerUnit = 50.0m, Quantity = 10m, Weight = 0.10,  InventoryLocation = 2 };
-            var MixedSet = new UnitItemEntity { Id = "Mixed Set (1 white + 1 black)", PricePerUnit = 100.0m, Quantity = 10m, Weight = 0.20, InventoryLocation = 0,};
-
 
             // ----- Inventory -----
             var inv = new InventoryEntity
@@ -39,39 +37,10 @@ namespace InventorySystem2.Data
                 Id = "main",
                 Stock = new List<ItemEntity> { Whiteshell, Blackshell}
             };
-
-            // ----- Tre ordrer i kø (eksempeldata) -----
-            var o1 = new OrderEntity
-            {
-                Time = DateTime.Now.AddMinutes(-10),
-                OrderLines = new List<OrderLineEntity>
-                {
-                    new() { Item = Whiteshell,  Quantity = 2 },
-                }
-            };
-
-            var o2 = new OrderEntity
-            {
-                Time = DateTime.Now.AddMinutes(-7),
-                OrderLines = new List<OrderLineEntity>
-                {
-                    new() { Item = Blackshell, Quantity = 2  },
-                }
-            };
-
-            var o3 = new OrderEntity
-            {
-                Time = DateTime.Now.AddMinutes(-2),
-                OrderLines = new List<OrderLineEntity>
-                {
-                    new() { Item = MixedSet, Quantity = 1 }
-
-                }
-            };
-
+            
             var book = new OrderBookEntity
             {
-                QueuedOrders = new List<OrderEntity> { o1, o2, o3 },
+                QueuedOrders = new List<OrderEntity>(),
                 ProcessedOrders = new List<OrderEntity>()
             };
 
