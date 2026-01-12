@@ -12,7 +12,7 @@
   -->
 
   <Grid Margin="16"
-        RowDefinitions="Auto,Auto,*,Auto"
+        RowDefinitions="Auto,Auto,Auto,*,Auto"
         ColumnDefinitions="*,*">
 
     <!-- Header -->
@@ -47,9 +47,55 @@
       <Button Content="Reset DB" MinWidth="110"
               Command="{Binding ResetDbCommand}" />
     </StackPanel>
+    <!-- Create Order -->
+    <Border Grid.Row="2" Grid.ColumnSpan="2"
+            BorderThickness="1" CornerRadius="8"
+            Padding="12" Margin="0,0,0,12">
+        <StackPanel Spacing="8">
+            <TextBlock Text="Opret ordre" FontWeight="SemiBold" />
+
+            <!-- Inputs -->
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock VerticalAlignment="Center" Text="Produkt:"/>
+                <ComboBox Width="220"
+                          ItemsSource="{Binding AvailableItemIds}"
+                          SelectedItem="{Binding SelectedItemId}" />
+
+                <TextBlock VerticalAlignment="Center" Text="Antal:"/>
+                <TextBox Width="80"
+                         Watermark="1"
+                         Text="{Binding NewQuantityText}" />
+
+                <Button Content="Add line"
+                        Command="{Binding AddOrderLineCommand}" />
+
+                <Button Content="Submit order"
+                        Command="{Binding SubmitOrderCommand}"
+                        MinWidth="120"/>
+            </StackPanel>
+
+            <!-- Draft lines -->
+            <ItemsControl ItemsSource="{Binding DraftOrderLines}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:DraftOrderLine">
+                        <Border Padding="8" CornerRadius="6" BorderThickness="1" Margin="0,4,0,0">
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right"
+                                        Content="Remove"
+                                        Command="{Binding $parent[Window].DataContext.RemoveOrderLineCommand}"
+                                        CommandParameter="{Binding}" />
+
+                                <TextBlock Text="{Binding Display}" />
+                            </DockPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </Border>
 
     <!-- Queued Orders -->
-    <StackPanel Grid.Row="2" Grid.Column="0">
+    <StackPanel Grid.Row="3" Grid.Column="0">
       <TextBlock Text="Queued orders"
                  FontWeight="SemiBold"
                  Margin="0,0,0,4"/>
@@ -67,7 +113,7 @@
     </StackPanel>
 
     <!-- Processed Orders -->
-    <StackPanel Grid.Row="2" Grid.Column="1">
+    <StackPanel Grid.Row="3" Grid.Column="1">
       <TextBlock Text="Processed orders"
                  FontWeight="SemiBold"
                  Margin="0,0,0,4"/>
@@ -85,7 +131,7 @@
     </StackPanel>
 
     <!-- Footer: statuslinje -->
-    <DockPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,8,0,0">
+    <DockPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,0">
       <TextBlock DockPanel.Dock="Left"
                  Text="Status:" FontWeight="SemiBold" Margin="0,0,8,0"/>
       <TextBlock DockPanel.Dock="Left"
