@@ -69,12 +69,43 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand PingCommand { get; }
     public ICommand CheckDbCommand { get; }
     public ICommand ResetDbCommand { get; }
+    
+
+    // ===== UI: Create order =====
+    public ObservableCollection<string> AvailableItemIds { get; } = new();
+
+    private string? _selectedItemId;
+    public string? SelectedItemId
+    {
+        get => _selectedItemId;
+        set { _selectedItemId = value; OnPropertyChanged(); }
+    }
+
+    private string _newQuantityText = "1";
+    public string NewQuantityText
+    {
+        get => _newQuantityText;
+        set { _newQuantityText = value; OnPropertyChanged(); }
+    }
+
+    public ObservableCollection<DraftOrderLine> DraftOrderLines { get; } = new();
+
+    public ICommand AddOrderLineCommand { get; }
+    public ICommand RemoveOrderLineCommand { get; }
+    public ICommand SubmitOrderCommand { get; }
 
     public MainWindowViewModel()
     {
         // === Læs fra database ===
         var bookEntity = DbReader.ReadOrderBook();
         var invEntity = DbReader.ReadInventory();
+        // ===== UI: Create order dropdown (White/Black fra inventory) =====
+        AvailableItemIds.Clear();
+        foreach (var it in invEntity.Stock)
+            AvailableItemIds.Add(it.Id);
+
+        SelectedItemId = AvailableItemIds.FirstOrDefault();
+        NewQuantityText = "1";
 
         _orderBook = MapOrderBook(bookEntity);
         _inventory = MapInventory(invEntity);
@@ -91,8 +122,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         QueuedOrders.CollectionChanged += (_, __)
             => ((RelayCommandAsync)ProcessNextCommand).RaiseCanExecuteChanged();
-    }
+        AddOrderLineCommand = new RelayCommandAsync(_ => AddOrderLineAsync());
+        RemoveOrderLineCommand = new RelayCommandAsync(line => RemoveOrderLineAsync(line));
+        SubmitOrderCommand = new RelayCommandAsync(_ => SubmitOrderAsync(), _ => DraftOrderLines.Count > 0);
 
+        DraftOrderLines.CollectionChanged += (_, __) =>
+            ((RelayCommandAsync)SubmitOrderCommand).RaiseCanExecuteChanged();
+
+    }
+    
     // ========== Mapping: Entities -> Domæne ==========
     private static Item MapItem(ItemEntity e) =>
         e switch
@@ -196,7 +234,99 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             StatusMessage = $"Reset error: {ex.Message}";
         }
     }
-    
+    private Task AddOrderLineAsync()
+{
+    if (string.IsNullOrWhiteSpace(SelectedItemId))
+    {
+        StatusMessage = "Vælg et produkt først.";
+        return Task.CompletedTask;
+    }
+
+    if (!int.TryParse(NewQuantityText, out var qty) || qty < 1)
+    {
+        StatusMessage = "Antal skal være et helt tal >= 1.";
+        return Task.CompletedTask;
+    }
+
+    // Merge: hvis samme item findes, læg quantity sammen
+    var existing = DraftOrderLines.FirstOrDefault(d => d.ItemId == SelectedItemId);
+    if (existing is null)
+    {
+        DraftOrderLines.Add(new DraftOrderLine(SelectedItemId, qty));
+    }
+    else
+    {
+        existing.Add(qty);
+
+        // Force refresh af Display (simpelt og stabilt)
+        var idx = DraftOrderLines.IndexOf(existing);
+        DraftOrderLines.RemoveAt(idx);
+        DraftOrderLines.Insert(idx, existing);
+    }
+
+    StatusMessage = "Order line added.";
+    return Task.CompletedTask;
+}
+
+private Task RemoveOrderLineAsync(object? lineObj)
+{
+    if (lineObj is DraftOrderLine line)
+        DraftOrderLines.Remove(line);
+
+    return Task.CompletedTask;
+}
+
+private async Task SubmitOrderAsync()
+{
+    try
+    {
+        if (DraftOrderLines.Count == 0)
+        {
+            StatusMessage = "Ingen orderlines at sende.";
+            return;
+        }
+
+        using var db = new InventoryDbContext();
+
+        var book = await db.OrderBooks
+            .Include(ob => ob.QueuedOrders)
+            .FirstOrDefaultAsync();
+
+        if (book is null)
+        {
+            StatusMessage = "DB error: OrderBook not found.";
+            return;
+        }
+
+        // Hent items fra DB (så OrderLines peger på eksisterende rows)
+        var ids = DraftOrderLines.Select(d => d.ItemId).ToList();
+        var items = await db.Items.Where(i => ids.Contains(i.Id)).ToListAsync();
+
+        var order = new OrderEntity
+        {
+            Time = DateTime.Now,
+            OrderLines = DraftOrderLines.Select(d =>
+            {
+                var item = items.First(i => i.Id == d.ItemId);
+                return new OrderLineEntity { Item = item, Quantity = d.Quantity };
+            }).ToList()
+        };
+
+        book.QueuedOrders.Add(order);
+
+        await db.SaveChangesAsync();
+
+        DraftOrderLines.Clear();
+        ReloadUiFromDb();
+
+        StatusMessage = "Order submitted ✅";
+    }
+    catch (Exception ex)
+    {
+        StatusMessage = $"Submit error: {ex.Message}";
+    }
+}
+
     // Process next: ROBOT + DB update
     private async Task ProcessNextAsync()
     {
@@ -238,12 +368,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 if (line.Item is null) continue;
 
                 // Quantity -> repeats (loop håndteres inde i URScript)
-                int repeat = (int)Math.Max(1, Math.Round(line.Quantity));
-
+                int repeat = (int)line.Quantity;
+                if (repeat < 1 || Math.Abs(line.Quantity - repeat) > 0.0001)
+                {
+                    StatusMessage = $"Invalid quantity: {line.Quantity}. Must be a whole number.";
+                    return;
+                }
+                
                 string program =
-                    line.Item.Id.Equals("Mix", StringComparison.OrdinalIgnoreCase)
-                        ? RobotPositions.ItemSorter_Mix(sim, repeat)
-                        : line.Item.Id.Equals("Black Shell", StringComparison.OrdinalIgnoreCase)
+                        line.Item.Id.Equals("Black Shell", StringComparison.OrdinalIgnoreCase)
                             ? RobotPositions.ItemSorter_BlackShell(sim, repeat)
                             : RobotPositions.ItemSorter_WhiteShell(sim, repeat);
 
@@ -308,6 +441,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+}
+public sealed class DraftOrderLine
+{
+    public string ItemId { get; }
+    public int Quantity { get; private set; }
+
+    public DraftOrderLine(string itemId, int quantity)
+    {
+        ItemId = itemId;
+        Quantity = quantity;
+    }
+
+    public void Add(int qty) => Quantity += qty;
+
+    public string Display => $"{ItemId} x {Quantity}";
 }
 
 // Async ICommand helper
