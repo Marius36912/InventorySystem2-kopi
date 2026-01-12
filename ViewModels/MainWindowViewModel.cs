@@ -324,7 +324,8 @@ public sealed class RelayCommandAsync : ICommand
         _executeAsync = executeAsync;
         _canExecute = canExecute;
     }
-
+    
+    
     public bool CanExecute(object? parameter)
         => !_isExecuting && (_canExecute?.Invoke(parameter) ?? true);
 
