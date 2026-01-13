@@ -41,7 +41,7 @@ public static class RobotPositions
     // D
     private static readonly Pose P_D_10 = new(0.42500, -0.275, -0.025, 2.225, 2.225, -0.00);
     private static readonly Pose P_D_0  = new(0.42500, -0.275, -0.125, 2.225, 2.225, -0.00);
-    
+
     // E
     private static readonly Pose P_E_10 = new(-0.0250, -0.4750, -0.025, 2.225, 2.225, -0.00);
     private static readonly Pose P_E_0  = new(-0.0250, -0.4750, -0.125, 2.225, 2.225, -0.00);
@@ -102,7 +102,10 @@ public static class RobotPositions
     // Black Shell  => B
     //
     // Skal køre:
-    // Start → A10/B10 → A0/B0 → A10/B10 → C10 → C0 → C10 → D10 → D0 → D10 → C10 → C2 → Start
+    // Start → A10/B10 → A0/B0 → A10/B10 → C10 → C0 → C10 → D10 → D0 → D10 → C10 → C2 → C10 → E10 → E0 → E10 → Start
+    //
+    // Sensor:
+    // PE_350mm (Standard DI3) tjekkes KUN mellem repeats (mellem sekvenser)
     // -------------------------------------------------------
     public static string ItemSorter_WhiteShell(bool sim) => ItemSorterSequenceLoop(sim, useB: false, repeats: 1);
     public static string ItemSorter_BlackShell(bool sim) => ItemSorterSequenceLoop(sim, useB: true, repeats: 1);
@@ -111,17 +114,30 @@ public static class RobotPositions
     public static string ItemSorter_BlackShell(bool sim, int repeats) => ItemSorterSequenceLoop(sim, useB: true, repeats: repeats);
 
     private static string ItemSorterSequenceLoop(bool sim, bool useB, int repeats)
-{
-    if (repeats < 1) repeats = 1;
+    {
+        if (repeats < 1) repeats = 1;
 
-    var pPick10 = useB ? P_B_10 : P_A_10;
-    var pPick0  = useB ? P_B_0  : P_A_0;
-    var label   = useB ? "BLACK SHELL (B)" : "WHITE SHELL (A)";
+        var pPick10 = useB ? P_B_10 : P_A_10;
+        var pPick0  = useB ? P_B_0  : P_A_0;
+        var label   = useB ? "BLACK SHELL (B)" : "WHITE SHELL (A)";
 
-    return $@"
+        return $@"
   textmsg(""ItemSorter LOOP: {label} x {repeats}"")
 
 {GripperFunctions(sim)}
+
+  # --------------------------
+  # Sensor check (ONLY between sequences)
+  # PE_350mm = Standard DI3 (som dit tablet-program)
+  # --------------------------
+  PE_350mm = 3
+
+  def wait_until_clear():
+    # Vent så længe sensoren er aktiv (True)
+    while get_standard_digital_in(PE_350mm):
+      sleep(0.1)
+    end
+  end
 
   # Gripper parametre
   open_mm       = 60
@@ -152,6 +168,9 @@ public static class RobotPositions
 
   i = 0
   while (i < {repeats}):
+
+    # Vent hvis der er noget i vejen ved E (mellem sekvenser)
+    wait_until_clear()
 
     textmsg(""Run #"" + to_str(i+1) + "" / {repeats}"")
 
@@ -198,109 +217,11 @@ public static class RobotPositions
 
   textmsg(""DONE LOOP: {label}"")
 ";
-}
-private static string ItemSorterMixLoop(bool sim, int repeats)
-{
-    if (repeats < 1) repeats = 1;
+    }
 
-    // Mix = (A + B) pr. repeat
-    // Sikker version: returnerer til start mellem runs.
-    return $@"
-  textmsg(""ItemSorter LOOP: MIX (A+B) x {repeats}"")
-
-{GripperFunctions(sim)}
-
-  # Gripper parametre
-  open_mm       = 60
-  open_pick_mm  = 85
-  close_mm      = 31
-  f_open        = 30
-  f_close       = 30
-
-  # --- Poses ---
-  p_start  = {P_START.ToUrScript()}
-
-  p_A_10 = {P_A_10.ToUrScript()}
-  p_A_0  = {P_A_0.ToUrScript()}
-
-  p_B_10 = {P_B_10.ToUrScript()}
-  p_B_0  = {P_B_0.ToUrScript()}
-
-  p_C_10 = {P_C_10.ToUrScript()}
-  p_C_0  = {P_C_0.ToUrScript()}
-  p_C_2  = {P_C_2.ToUrScript()}
-
-  p_D_10 = {P_D_10.ToUrScript()}
-  p_D_0  = {P_D_0.ToUrScript()}
-
-  p_E_10 = {P_E_10.ToUrScript()}
-  p_E_0  = {P_E_0.ToUrScript()}
-
-  # Start-position og sikker gripper
-  rg_grip(close_mm, f_close)
-  movel(p_start, a=0.3, v=0.15)
-
-  # Fælles run-sekvens som URScript-funktion
-  def do_run(p_pick_10, p_pick_0):
-
-    movel(p_pick_10, a=0.4, v=0.2)
-    movel(p_pick_0,  a=0.2, v=0.1)
-
-    rg_grip(open_pick_mm, f_open)  # ÅBN 85 mm
-
-    movel(p_pick_10, a=0.2, v=0.1)
-
-    # C10 -> C0 -> C10
-    movel(p_C_10, a=0.4, v=0.2)
-    movel(p_C_0,  a=0.2, v=0.1)
-    rg_grip(open_mm, f_open)       # SLIP ved C0
-    movel(p_C_10, a=0.2, v=0.1)
-
-    # D10 -> D0 -> D10
-    movel(p_D_10, a=0.4, v=0.2)
-    movel(p_D_0,  a=0.2, v=0.1)
-    rg_grip(close_mm, f_close)     # GRIP ved D0
-    movel(p_D_10, a=0.2, v=0.1)
-
-    # C10 -> C2
-    movel(p_C_10, a=0.4, v=0.2)
-    movel(p_C_2,  a=0.2, v=0.1)
-    rg_grip(open_pick_mm, f_open)  # ÅBN 85 mm ved C2
-
-    # C10 -> E10 -> E0 (ingen D10 her)
-    movel(p_C_10, a=0.4, v=0.2)
-    movel(p_E_10, a=0.4, v=0.2)
-    movel(p_E_0,  a=0.2, v=0.1)
-
-    rg_grip(open_mm, f_open)       # SLIP ved E0 (60 mm)
-
-    # E10 -> Start
-    movel(p_E_10, a=0.4, v=0.2)
-    movel(p_start, a=0.4, v=0.2)
-
-  end
-
-  i = 0
-  while (i < {repeats}):
-
-    textmsg(""MIX repeat "" + to_str(i+1) + "" / {repeats}"")
-
-    # A (White)
-    do_run(p_A_10, p_A_0)
-
-    # B (Black)
-    do_run(p_B_10, p_B_0)
-
-    i = i + 1
-  end
-
-  textmsg(""DONE LOOP: MIX"")
-";
-}
-
-public static string AssemblyToOutput(bool sim)
-{
-    return $@"
+    public static string AssemblyToOutput(bool sim)
+    {
+        return $@"
   textmsg(""Assembly -> Output"")
 
 {GripperFunctions(sim)}
@@ -332,14 +253,14 @@ public static string AssemblyToOutput(bool sim)
 
   textmsg(""DONE: Assembly -> Output"")
 ";
-}
+    }
 
-// -------------------------------------------------------
-// Small record for readability
-// -------------------------------------------------------
-private readonly record struct Pose(double X, double Y, double Z, double RX, double RY, double RZ)
-{
-    public string ToUrScript()
-        => $"p[{F(X)}, {F(Y)}, {F(Z)}, {F(RX)}, {F(RY)}, {F(RZ)}]";
-}
+    // -------------------------------------------------------
+    // Small record for readability
+    // -------------------------------------------------------
+    private readonly record struct Pose(double X, double Y, double Z, double RX, double RY, double RZ)
+    {
+        public string ToUrScript()
+            => $"p[{F(X)}, {F(Y)}, {F(Z)}, {F(RX)}, {F(RY)}, {F(RZ)}]";
+    }
 }
