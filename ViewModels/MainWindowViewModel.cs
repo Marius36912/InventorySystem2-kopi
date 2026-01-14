@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using InventorySystem2.Models;
 using InventorySystem2.Data;
 using InventorySystem2.Data.Entities;
+using InventorySystem2.Auth;
 
 namespace InventorySystem2.ViewModels;
 
@@ -64,7 +65,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         get => _statusMessage;
         private set { _statusMessage = value; OnPropertyChanged(); }
     }
-
+    
+    public bool IsAdmin => Session.CurrentUser?.IsAdmin == true;
     public ICommand ProcessNextCommand { get; }
     public ICommand PingCommand { get; }
     public ICommand CheckDbCommand { get; }
