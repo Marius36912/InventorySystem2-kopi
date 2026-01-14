@@ -23,8 +23,8 @@
     <!-- Controls row -->
     <StackPanel Grid.Row="1" Grid.ColumnSpan="2"
                 Orientation="Horizontal" Spacing="12" Margin="0,8,0,8">
-
-      <!-- Robot: IP + Connect (Ping) -->
+        
+        <!-- Robot: IP + Connect (Ping) -->
       <TextBlock VerticalAlignment="Center" Text="Robot IP:"/>
       <TextBox Width="180"
                Watermark="localhost"
@@ -132,11 +132,22 @@
 
     <!-- Footer: statuslinje -->
     <DockPanel Grid.Row="4" Grid.ColumnSpan="2" Margin="0,8,0,0">
-      <TextBlock DockPanel.Dock="Left"
-                 Text="Status:" FontWeight="SemiBold" Margin="0,0,8,0"/>
+        <StackPanel DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="8">
+            <Button Content="Create user"
+                    IsVisible="{Binding IsAdmin}"
+                    MinWidth="120"
+                    Click="CreateUser_Click"/>
+
+            <Button Content="Logout"
+                    MinWidth="110"
+                    Click="Logout_Click"/>
+        </StackPanel>
+        <TextBlock DockPanel.Dock="Left"
+                   Text="Status:" FontWeight="SemiBold" Margin="0,0,8,0"/>
       <TextBlock DockPanel.Dock="Left"
                  Text="{Binding StatusMessage}" />
     </DockPanel>
-
   </Grid>
 </Window>
