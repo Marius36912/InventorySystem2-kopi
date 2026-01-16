@@ -1,126 +1,108 @@
-// =======================================================
-// README: Inventory System
-// Aflevering for uge 6 – Industriel Programmering
-// =======================================================
+Toy Box Factory - Automated Assembly with UR Robot
+This repository contains the implementation of a database driven automated assembly system developed for the Industrial Programming three week project.
+The project demonstrates how a C# desktop application, SQLite databases, and a Universal Robots (UR) industrial robot can be used to form a simplified but realistic automated production system aligned with Industry 4.0 and Industry 5.0 principles.
 
-// Projekt:
-// Dette program er et simpelt Inventory System skrevet i C# med Avalonia GUI
-// Programmet viser et lager, ordrer i kø og ordrer som er blevet behandlet.
-// Der er to DataGrids i vinduet,  et til "Queued Orders" og et til "Processed Orders".
-// Når brugeren trykker på knappen process next order, flyttes næste ordre fra køen over i listen med færdigbehandlede ordrer.
-// Omsætningen opdateres automatisk.
+Project Overview
+The objective of the project is to automate the assembly of toy boxes by digitally controlling production orders and translating them into physical robot actions.
+The system allows an operator to:
+- Create production orders via a graphical user interface
+- Store and track orders persistently in a database
+- Execute assembly operations using a UR robot
+- Maintain traceability between digital orders and physical production
 
-// Opbygning:
-// GUI lavet i avalonia XAML.
-// Logik placeret i viewmodel med mvvm.
-// Domæneklasser er som angivet (Item, Order, Inventory osv.) ligger i models mappe.
-// MainWindow.xaml viser data med bindinger til ViewModel.
-// Program.cs starter appen via Avalonia’s desktop-lifetime.
+The solution focuses on clarity, traceability, safety, and extensibility, rather than full industrial scale automation.
 
-// AI-brug:
-// Denne aflevering er udviklet med hjælp fra 
-// kilde: ChatGPT (OpenAI, 2025).
-// ChatGPT har været brugt som feedback og kodeassistent under arbejdet.
-// Konkret har jeg brugt AI til at:
-// Generere et grundskelet for Avalonia GUI og MVVM-struktur ud fra mine udarbejdede aktivities og noter fra timen.
-// Hjælpe med at rette build fejl og forstå bindinger i XAML, samt sparring med noter og pensum for besvarelse af aflevering.
-// Den har derudover givet forslag til kommentarer og forenkling af viewmodel koden.
-// Brugte også til read me og class diagram skelet, hvor jeg har skrevet om til eget sprog.
-// Jeg har selv skrevet og tilpasset al kode, gennemgået logikken,
-// og indsat mine egne danske kommentarer for at vise forståelse af pensum.
-// Jeg tager fuldt ansvar for den endelige kode, struktur og rapport.
-// Jeg er ansvarlig for den afleverede løsning.
+System Architecture
+The system is structured into clearly separated layers to ensure modularity and maintainability:
+- GUI for the Operator Station
+- Using Avalonia template desktop application
+- Application & Domain Logic
 
-//Filervedlagt
-// Screen cap
-// Flowdiagram
-// Class diagram
+Coordinates order handling, inventory updates, and robot execution.
 
-README.md — InventorySystemRobotControl
-## aflevering 7
-# InventorySystemRobotControl  
-Aflevering – Industriel Programmering (Uge 6 + 7)
+Data Layer
+- SQLite databases accessed via Entity Framework Core (EF Core).
+- Robot Integration Layer
+- URScript programs generated and sent to the robot over TCP/IP.
 
-## Projektoversigt
-Dette projekt kombinerer et **Inventory System** (uge 6) med **robotstyring** (uge 7) i C# og avalonia gui
+Production Flow
+- Operator creates a production order in the GUI
+- Order is stored in a SQLite database
+- Application retrieves the next queued order
+- Order data is translated into predefined robot motion sequences
+- The UR robot executes the assembly process
+- Order state and inventory quantities are updated in the database
+- GUI reflects the updated system state
 
-Uge 6: Lagerstyring og GUI
-Uge 7: Udvidelse med når en ordre behandles, sender programmet ur script ti lur sim
-Robotten henter op til tre varer fra A,B,C og placerer i S
-Jeg satte docker og image op med temrinalen
-- Docker Desktop med image `universalrobots/ursim_e-series`
+This architecture ensures that production state is persistent, traceable, and restart safe.
 
-## Her er min Port mapping taget fra terminal
-| Funktion | Port |
-|-----------|------|
-| VNC (interface) | 6080 |
-| Dashboard | 29999 |
-| URScript (stream) | 30002 |
+Robot Integration
+- Communication with the robot is handled via TCP/IP
+- Robot programs are generated dynamically in URScript
+- Motion logic is centralized in a dedicated RobotPositions module
+- Supports both URSim simulation and real robot execution
+- Sensor input is used to ensure safe sequencing and placement
 
-## Kørselstrin vejledning
-### Start URSim i Docker
-```bash
-docker run -d --name robot-simulator \
-  -p 6080:6080 -p 29999:29999 -p 30002:30002 \
-  -e ROBOT_MODEL=UR3 \
-  universalrobots/ursim_e-series
-Åbn URSim-pendant
-http://localhost:6080/vnc.html?autoconnect=true 
-Tryk Power On og start Brake Release (grøn). 
-Valgfrit (dashboard kommandoer) eller run program i rider
+Separating robot motion definitions from UI and database logic allows for easier calibration, testing, and future optimization.
 
-printf "power on\n" | nc localhost 29999
-printf "brake release\n" | nc localhost 29999
-Kør appen fra Rider
-1. Run i Rider og GUI starter.
-2. Klik Process next order -> robot laver A til S, B til S, C til S pr. ordre
-3. Tryk igen (≥ 2 ordrer = kravet “test med mindst to ordrer”).
-4. GUI viser opdateret omsætning og flyttede ordrer.
+Database Design
+The database acts as the single source of truth for production state.
+SQLite is used as the database engine.
+Entity Framework Core (EF Core) is used for ORM access.
 
-## video
-Viser:
-1. URSim → Power On + Brake Release (grøn).
-2. App startes i Rider.
-3. Process next order × 3 → robot bygger A,B,C → S hver gang.
-4. GUI viser kø, ordre og pris.
+Two databases are included:
+inventory.sqlite for production data (inventory, orders), you can use check DB to locate file in the project files.
+auth.sqlite for authentication and user management
 
-## ai brug
-AI-brug:
-Denne aflevering er udviklet med hjælp fra 
-kilde: ChatGPT (OpenAI, 2025).
-ChatGPT har været brugt som feedback og kodeassistent under arbejdet.
-Konkret har jeg brugt AI til at:
-Generere et grundskelet for Avalonia GUI og MVVM-struktur ud fra mine udarbejdede aktivities og noter fra timen.
-Hjælpe med at rette build fejl og forstå bindinger i XAML, samt sparring med noter og pensum for besvarelse af aflevering.
-Den har derudover givet forslag til kommentarer og forenkling af viewmodel koden.
-Brugte også til read me og class diagram skelet, hvor jeg har skrevet om til eget sprog.
-Jeg har selv skrevet og tilpasset al kode, gennemgået logikken,
-og indsat mine egne danske kommentarer for at vise forståelse af pensum.
-Jeg tager fuldt ansvar for den endelige kode, struktur og rapport.
-Jeg er ansvarlig for den afleverede løsning.
+Core Concepts
+Inventory and Items
+Orders and OrderLines
+OrderBook with queued and processed orders
+Persistent state across application restarts
+A controlled seed and reset mechanism is implemented to support testing and demonstrations without deleting database files.
 
+Security
+The system includes a basic but realistic security implementation:
+Login system with salted and hashed passwords
+Role based access control (Admin / Operator)
+Administrative actions restricted to admin users
+Separate authentication database
+This reflects fundamental operational technology security principles taught in the course.
 
-// =======================================================
+Testing & Demonstration
+Tested using URSim and physical robot hardware
+Robot sequences validated through iterative calibration
+Database reset functionality enables repeatable demonstrations
+Demonstration video is provided separately (see report/presentation)
 
-Week 09: Database (Persistent Inventory)
+Future Extensions (Out of Scope)
+Conveyor belt integration
+Vision system (camera-based part detection)
+Additional robots
+Fully automated scheduling
+Advanced analytics and optimization
 
-- Programmet bruger SQLite-database (`inventory_main`) til at gemme varer og ordrer.
-- Process Order opdaterer tabellerne `Items` og `Orders` i databasen.
-- Reset DB nulstiller indholdet uden at slette selve filen.
-- Efter genstart bevares ændringerne i databasen.
-- Se video-demoen: [link til video]
+AI Usage Disclosure
+This project was developed with limited assistance from a generative AI tool.
 
-## ai brug
-AI-brug:
-Denne aflevering er udviklet med hjælp fra 
-kilde: ChatGPT (OpenAI, 2025).
-ChatGPT har været brugt som feedback og kodeassistent under arbejdet.
-Konkret har jeg brugt AI til at:
-Generere et grundskelet for Avalonia GUI og MVVM-struktur ud fra mine udarbejdede aktivities og noter fra timen.
-Hjælpe med at rette build fejl og forstå bindinger i XAML, samt sparring med noter og pensum for besvarelse af aflevering.
-Den har derudover givet forslag til kommentarer og forenkling af viewmodel koden.
-Brugte også til read me og class diagram skelet, hvor jeg har skrevet om til eget sprog.
-Jeg har selv skrevet og tilpasset al kode, gennemgået logikken,
-og indsat mine egne danske kommentarer for at vise forståelse af pensum.
-Jeg tager fuldt ansvar for den endelige kode, struktur og rapport.
-Jeg er ansvarlig for den afleverede løsning.
+Tool used:
+ChatGPT (OpenAI, 2025)
+How AI was used:
+As a feedback and code assistance tool during development
+- To generate an initial structural skeleton for the Avalonia GUI and MVVM architecture based on our own assignments, activity diagrams, lecture notes, and project planning
+- To help identify and resolve build errors and clarify XAML code.
+- For sparring related to course material and written explanations
+- To suggest improvements to comments, structure, and simplification of ViewModel logic
+- To assist with drafting the README file and an initial class diagram structure, which were subsequently rewritten and adapted into my own wording
+- To suggest code for optimization of gui, databases and robot positions.
+
+Author responsibility:
+All code has been written, reviewed, adapted, and understood by the group.
+We have verified the logic manually, modified the structure where necessary, and added own comments to demonstrate understanding of the curriculum.
+We take full responsibility for the final implementation, system design, documentation, and submitted solution.
+
+Authors
+Lars Bach Sørensen - s235648
+Lasse Manicus - s235655
+Marius Millington - s235659
+Developed as part of Industrial Programming at DTU.
