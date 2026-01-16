@@ -75,13 +75,6 @@ Testing & Demonstration
 - Database reset functionality enables repeatable demonstrations
 Demonstration video is provided separately (see report/presentation)
 
-Future Extensions (Out of Scope)
-- Conveyor belt integration
-- Vision system (camera-based part detection)
-- Additional robots
-- Fully automated scheduling
-- Advanced analytics and optimization
-
 AI Usage Disclosure
 - This project was developed with limited assistance from a generative AI tool.
 - Source: ChatGPT (OpenAI, 2025)
