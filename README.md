@@ -46,47 +46,45 @@ Robot Integration
 Separating robot motion definitions from UI and database logic allows for easier calibration, testing, and future optimization.
 
 Database Design
-The database acts as the single source of truth for production state.
-SQLite is used as the database engine.
-Entity Framework Core (EF Core) is used for ORM access.
+- The database acts as the single source of truth for production state.
+- SQLite is used as the database engine.
+- Entity Framework Core (EF Core) is used for ORM access.
 
 Two databases are included:
-inventory.sqlite for production data (inventory, orders), you can use check DB to locate file in the project files.
-auth.sqlite for authentication and user management
+- inventory.sqlite for production data (inventory, orders), you can use check DB to locate file in the project files.
+- auth.sqlite for authentication and user management
 
 Core Concepts
-Inventory and Items
-Orders and OrderLines
-OrderBook with queued and processed orders
-Persistent state across application restarts
+- Inventory and Items
+- Orders and OrderLines
+- OrderBook with queued and processed orders
+- Persistent state across application restarts
 A controlled seed and reset mechanism is implemented to support testing and demonstrations without deleting database files.
 
 Security
-The system includes a basic but realistic security implementation:
-Login system with salted and hashed passwords
-Role based access control (Admin / Operator)
-Administrative actions restricted to admin users
-Separate authentication database
+- The system includes a basic but realistic security implementation:
+- Login system with salted and hashed passwords
+- Role based access control (Admin / Operator)
+- Administrative actions restricted to admin users
+- Separate authentication database
 This reflects fundamental operational technology security principles taught in the course.
 
 Testing & Demonstration
-Tested using URSim and physical robot hardware
-Robot sequences validated through iterative calibration
-Database reset functionality enables repeatable demonstrations
+- Tested using URSim and physical robot hardware
+- Robot sequences validated through iterative calibration
+- Database reset functionality enables repeatable demonstrations
 Demonstration video is provided separately (see report/presentation)
 
 Future Extensions (Out of Scope)
-Conveyor belt integration
-Vision system (camera-based part detection)
-Additional robots
-Fully automated scheduling
-Advanced analytics and optimization
+- Conveyor belt integration
+- Vision system (camera-based part detection)
+- Additional robots
+- Fully automated scheduling
+- Advanced analytics and optimization
 
 AI Usage Disclosure
-This project was developed with limited assistance from a generative AI tool.
-
-Tool used:
-ChatGPT (OpenAI, 2025)
+- This project was developed with limited assistance from a generative AI tool.
+- Source: ChatGPT (OpenAI, 2025)
 How AI was used:
 As a feedback and code assistance tool during development
 - To generate an initial structural skeleton for the Avalonia GUI and MVVM architecture based on our own assignments, activity diagrams, lecture notes, and project planning
@@ -97,9 +95,9 @@ As a feedback and code assistance tool during development
 - To suggest code for optimization of gui, databases and robot positions.
 
 Author responsibility:
-All code has been written, reviewed, adapted, and understood by the group.
-We have verified the logic manually, modified the structure where necessary, and added own comments to demonstrate understanding of the curriculum.
-We take full responsibility for the final implementation, system design, documentation, and submitted solution.
+- All code has been written, reviewed, adapted, and understood by the group.
+- We have verified the logic manually, modified the structure where necessary, and added own comments to demonstrate understanding of the curriculum.
+- We take full responsibility for the final implementation, system design, documentation, and submitted solution.
 
 Authors
 Lars Bach Sørensen - s235648
